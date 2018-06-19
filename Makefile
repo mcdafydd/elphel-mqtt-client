@@ -6,6 +6,7 @@ OBJS=utils.o mqttclient.o
 OUTFILE=mqttclient
 
 x86: $(OBJS)
+	mkdir -p build
 	$(CC) -o build/$(OUTFILE) $(CFLAGS) $(LDFLAGS) $(OBJS) $(LIBS)
 utils.o: utils.c utils.h
 	$(CC) -c utils.c -o utils.o $(CFLAGS)
