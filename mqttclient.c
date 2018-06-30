@@ -375,10 +375,10 @@ int main(int argc, char* argv[])
     }
 #endif
 
-    MQTTClient_create(&client, serverUri, clientId,
+    //MQTTClient_create(&client, serverUri, clientId,
            MQTTCLIENT_PERSISTENCE_NONE, NULL);
-    //MQTTClient_create(&client, ADDRESS, CLIENTID,
-     //   MQTTCLIENT_PERSISTENCE_NONE, NULL);
+    MQTTClient_create(&client, ADDRESS, clientId,
+           MQTTCLIENT_PERSISTENCE_NONE, NULL);
     conn_opts.keepAliveInterval = 30;
     conn_opts.cleansession = 1;
     conn_opts.retryInterval = 10;

@@ -34,7 +34,7 @@
 #include <stddef.h>
 
 /* Default Configurations */
-#define ADDRESS                   "tcp://192.168.2.197:1883"
+#define ADDRESS                   "tcp://192.168.2.80:1883"
 #define CLIENTID                  "elphel-000000000000"
 #define TOPIC                     "fromScini/elphel/telemetry"
 #define PAYLOAD                   "mqttClientConnected"
