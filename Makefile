@@ -17,4 +17,4 @@ install: x86
 uninstall: /usr/local/bin/$(OUTFILE)
 	rm -f /usr/local/bin/$(OUTFILE)
 clean : 
-	rm -f build/* *.o 
+	rm -rf build/* *.o 
