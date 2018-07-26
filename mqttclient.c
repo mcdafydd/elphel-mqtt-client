@@ -91,7 +91,7 @@ int discover_broker_ip(char *brokerIp)
     /* allow multiple sockets to use the same PORT number */
     /* allow broadcast receive */
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR|SO_BROADCAST,
-        &yes,sizeof(yes)) < 0) 
+        &yes,sizeof(yes)) < 0)
     {
         perror("DISCOVER: setsockopt()");
         return -1;
@@ -99,7 +99,7 @@ int discover_broker_ip(char *brokerIp)
     timeout.tv_sec = 10;
     timeout.tv_usec = 0;
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
-        &timeout,sizeof(timeout)) < 0) 
+        &timeout,sizeof(timeout)) < 0)
     {
         perror("DISCOVER: setsockopt()");
         return -1;
@@ -109,25 +109,25 @@ int discover_broker_ip(char *brokerIp)
     saddr.sin_family = AF_INET;
     saddr.sin_addr.s_addr = htonl(INADDR_ANY);
     saddr.sin_port = htons(BEACON_PORT);
-    
+
     /* bind to receive address */
-    if (bind(fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) 
+    if (bind(fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0)
     {
         perror("DISCOVER: bind()");
         return -1;
     }
-    
+
     /* now just enter a read loop */
     while (1) {
         if ((nbytes = recvfrom(fd, msgbuf, MAX_BUFFER_SIZE, 0,
-                (struct sockaddr *) &saddr, &addrlen)) < 0) 
+                (struct sockaddr *) &saddr, &addrlen)) < 0)
         {
             perror("DISCOVER: recvfrom()");
             return -1;
         }
 
         ptr = inet_ntop(AF_INET, &(saddr.sin_addr), ip_s, INET_ADDRSTRLEN);
-        if (!ptr) 
+        if (!ptr)
         {
             perror("inet_ntop()");
             return -1;
@@ -136,7 +136,7 @@ int discover_broker_ip(char *brokerIp)
         {
             memcpy(brokerIp, ip_s, INET_ADDRSTRLEN);
         }
-        fprintf(stdout, "DISCOVER: recv = %d bytes; src_ip = %s\n", nbytes, 
+        fprintf(stdout, "DISCOVER: recv = %d bytes; src_ip = %s\n", nbytes,
                 ip_s);
         break;
     }
@@ -147,15 +147,27 @@ int discover_broker_ip(char *brokerIp)
 void get_mac(unsigned char mac_addr[13])
 {
     #define HWADDR_len 6
+    #define IFNAME_len 12
     int s, i;
     struct ifreq ifr;
+    char *mqttif;
     s = socket(AF_INET, SOCK_DGRAM, 0);
-    strcpy(ifr.ifr_name, DEFAULT_INTERFACE);
+    mqttif = calloc(IFNAME_len, sizeof(char));
+    mqttif = getenv("MQTT_INTERFACE");
+    if(mqttif == NULL)
+    {
+        strncpy(ifr.ifr_name, DEFAULT_INTERFACE, IFNAME_len-1);
+    }
+    else
+    {
+        strncpy(ifr.ifr_name, mqttif, IFNAME_len-1);
+    }
     ioctl(s, SIOCGIFHWADDR, &ifr);
     for (i=0; i<HWADDR_len; i++) {
         sprintf(&mac_addr[i*2],"%02x",((unsigned char *)ifr.ifr_hwaddr.sa_data)[i]);
-    } 
+    }
     mac_addr[12]='\0';
+    printf("MAC = %s\n", mac_addr);
     close(s);
     return;
 }
@@ -187,6 +199,14 @@ int message_cb(int tty_fd, char *topicName, int topicLen, MQTTClient_message *me
     printf("Message arrived\n");
     printf("     topic: %s\n", topicName);
     printf("   message: ");
+
+    if (resid <= 0)
+    {
+        printf("*** MQTTCLIENT: Message payload length less-than or equal to zero bytes *** \n");
+        MQTTClient_freeMessage(&message);
+        MQTTClient_free(topicName);
+        return 1;
+    }
 
     while (resid > 0)
     {
@@ -229,7 +249,7 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
     FD_SET(tty_fd, &recvfds);
     FD_ZERO(&errfds);
     FD_SET(tty_fd, &errfds);
-    
+
     if (*loopCount > 10000)
     {
         // assume server died, exit and respawn
@@ -249,7 +269,7 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
     else if (rc == MQTTCLIENT_SUCCESS && rxMessage)
     {
         // message received - write to serial asap and reset loop counter
-        message_cb(tty_fd, topicName, *topicLen, rxMessage);
+        message_cb(tty_fd, rxTopicName, *topicLen, rxMessage);
         *loopCount = 0;
     }
     else if (rc < 0)
@@ -262,13 +282,13 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
     if (rc > 0)
     {
         /* Check if rx or error XXX - add err check */
-        if (FD_ISSET(tty_fd, &recvfds)) 
+        if (FD_ISSET(tty_fd, &recvfds))
         {
             char rs485buf[1000];
             ssize_t rc = 0;
 
             rc = read(tty_fd, rs485buf, sizeof(rs485buf));
-               
+
             if (rc == -1)
             {
                 perror("serial read()");
@@ -284,7 +304,7 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
                 printf("Message with delivery token %d delivered\n", token);
             }
         }
-        else if (FD_ISSET(tty_fd, &errfds)) 
+        else if (FD_ISSET(tty_fd, &errfds))
         {
             rc = -1;
             perror("select()");
@@ -294,7 +314,7 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
     {
         perror("select()");
     }
-    else 
+    else
     {
         /* timeout or signal */
         serialTimedOut = 1;
@@ -325,7 +345,7 @@ int main(int argc, char* argv[])
     brokerIp = calloc(16, sizeof(char)); // size = AAA.BBB.CCC.DDD\0
     printf("Entering discovery...\n");
     rc = discover_broker_ip(brokerIp);
-    if (rc == 0) 
+    if (rc == 0)
     {
         // discover succeeded
         // turn this into tcp://<name/IP>:port
@@ -344,7 +364,7 @@ int main(int argc, char* argv[])
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_protocol = IPPROTO_TCP;
-        
+
         rc = getaddrinfo(host, NULL, &hints, &result);
 
         if (rc >= 0 && result != NULL) {
@@ -384,12 +404,14 @@ int main(int argc, char* argv[])
     conn_opts.retryInterval = 10;
 
     /* parse arguments */
+    /*
     rc = mqtt_parse_args(&conn_opts, argc, argv);
     if (rc != 0) {
         return rc;
     }
+    */
 
-    if (signal(SIGINT, sig_handler) == SIG_ERR) 
+    if (signal(SIGINT, sig_handler) == SIG_ERR)
     {
         printf("Can't catch SIGINT");
     }
@@ -397,7 +419,7 @@ int main(int argc, char* argv[])
     /* if usbdevice == NULL, use stdin/stdout already open */
     usbdevice = calloc(30, sizeof(char));
     usbdevice = getenv("USBDEVICE");
-    if(usbdevice == NULL) 
+    if(usbdevice == NULL)
     {
         tty_fd = open(DEFAULT_USB_DEVICE, O_RDWR | O_NOCTTY | O_NONBLOCK);
     }
@@ -433,11 +455,11 @@ int main(int argc, char* argv[])
     printf("Subscribing to topic %s\nfor client %s using QoS%d\n"
         , topic1, clientId, QOS);
     MQTTClient_subscribe(client, topic1, QOS);
-    
+
     printf("Subscribing to topic %s\nfor client %s using QoS%d\n"
     , topic2, clientId, QOS);
     MQTTClient_subscribe(client, topic2, QOS);
-    
+
     /* Create publish topic */
     char pubTopicName[29] = "fromScini/";
     int tLen = 30;
@@ -454,7 +476,7 @@ int main(int argc, char* argv[])
     MQTTClient_unsubscribe(client, topic2);
     MQTTClient_disconnect(client, TIMEOUT);
     MQTTClient_destroy(&client);
-    
+
     return (rc == 0) ? 0 : EXIT_FAILURE;
 
 }
