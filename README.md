@@ -6,7 +6,7 @@ The software was built for the SCINI underwater ROV.  It is meant to run on the 
 
 # Modify MQTT Interface for Testing
 
-By default, the MQTT client ID is dynamically assigned as **elphel-<macaddr>**, where <macaddr> is retrieved from eth0, as that is the primary Ethernet interface on the Elphel 353 cameras.  If you're testing on a platform with the new predictable interface names, or something other than eth0, you can modify the chosen interface by setting the interface name to the value of the environment variable **MQTT_INTERFACE**.
+By default, the MQTT client ID is dynamically assigned as `elphel-<macaddr>`, where `<macaddr>` is retrieved from eth0, as that is the primary Ethernet interface on the Elphel 353 cameras.  If you're testing on a platform with the new predictable interface names, or something other than eth0, you can modify the chosen interface by setting the interface name to the value of the environment variable **MQTT_INTERFACE**.
 
 If you do not set the MQTT_INTERFACE value, and the default eth0 interface is not available, the MQTT client ID will be set to `elphel-000000000000`.  This is not a problem, unless you have multiple testers with the same client ID.  In this case, they will conflict with one another at the broker.
 
