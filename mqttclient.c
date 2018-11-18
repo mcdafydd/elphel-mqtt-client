@@ -221,7 +221,7 @@ int message_cb(int tty_fd, char *topicName, int topicLen, MQTTClient_message *me
     return 1;
 }
 
-void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, int *loopCount)
+void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, int *loopCount, int *isMasterPtr)
 {
     fd_set recvfds;
     fd_set errfds;
@@ -231,8 +231,7 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
     // serial select() will iterate every 1.1ms-ish
     // XXX - automatic reconnect feature is only available in async mode
     // which we aren't using at the moment
-    // to simulate, exit program if loopCount > 10000 (about 10 seconds)
-    // init will respawn new process and reconnect
+    // init will respawn new process and reconnect if keepAliveInterval ping fails
     unsigned long mqttRxTimeout = 1; // MQTT timeout in milliseconds
     int serialTimedOut = 0; // boolean if serial select() times out
     int mqttTimedOut = 0; // boolean if MQTT receive times out
@@ -252,10 +251,7 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
 
     if (*loopCount > 10000)
     {
-        // assume server died, exit and respawn
-        perror("lost connection to server via loopCount");
-        mStopRead = 1;
-        return;
+      *loopCount = 0;
     }
 
     // Check MQTT buffer before tty select()
@@ -269,6 +265,8 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
     else if (rc == MQTTCLIENT_SUCCESS && rxMessage)
     {
         // message received - write to serial asap and reset loop counter
+        // assume this client is an RS-485 bus master
+        *isMasterPtr = 1;
         message_cb(tty_fd, rxTopicName, *topicLen, rxMessage);
         *loopCount = 0;
     }
@@ -299,9 +297,13 @@ void run_handler(int tty_fd, MQTTClient client, char *topicName, int *topicLen, 
                 pubmsg.payloadlen = rc;
                 pubmsg.qos = QOS;
                 pubmsg.retained = 0;
-                MQTTClient_publishMessage(client, topicName, &pubmsg, &token);
-                rc = MQTTClient_waitForCompletion(client, token, TIMEOUT);
-                printf("Message with delivery token %d delivered\n", token);
+                // only send serial data to network if bus master or
+                // to send periodic, small amounts of troubleshooting data
+                if (*isMasterPtr || *loopCount == 5000) {
+                  MQTTClient_publishMessage(client, topicName, &pubmsg, &token);
+                  rc = MQTTClient_waitForCompletion(client, token, TIMEOUT);
+                  printf("Message with delivery token %d delivered\n", token);
+                }
             }
         }
         else if (FD_ISSET(tty_fd, &errfds))
@@ -328,8 +330,8 @@ int main(int argc, char* argv[])
 
     int rc;
     int tty_fd;
+    int isMaster = 0;  // used to control whether we should send read serial or write to network
     int loopCount = 0; // used to detect lost connection to broker
-    int *loopPtr = &loopCount;
     char *usbdevice;
     struct sockaddr_in addr; // used for discovery
     unsigned char mac_addr[13];
@@ -399,7 +401,7 @@ int main(int argc, char* argv[])
            MQTTCLIENT_PERSISTENCE_NONE, NULL);
     //MQTTClient_create(&client, ADDRESS, clientId,
     //       MQTTCLIENT_PERSISTENCE_NONE, NULL);
-    conn_opts.keepAliveInterval = 30;
+    conn_opts.keepAliveInterval = 15;
     conn_opts.cleansession = 1;
     conn_opts.retryInterval = 10;
 
@@ -434,12 +436,14 @@ int main(int argc, char* argv[])
     }
     initPort(tty_fd, B115200);
     usleep(500000);
+    tcflush(tty_fd, TCIOFLUSH);
 
     /* Connect to MQTT broker */
     if ((rc = MQTTClient_connect(client, &conn_opts)) != MQTTCLIENT_SUCCESS)
     {
         printf("Failed to connect, return code %d\n", rc);
         printf("server uri = %s\n", serverUri);
+        sleep(1);
         exit(-1);
     }
 
@@ -452,6 +456,7 @@ int main(int argc, char* argv[])
 
     // XXX - subscribing to two topics works great on x86,
     // but on Axis Etrax FS (elphel 353), topic becomes null
+    // so one topic each subscribe
     printf("Subscribing to topic %s\nfor client %s using QoS%d\n"
         , topic1, clientId, QOS);
     MQTTClient_subscribe(client, topic1, QOS);
@@ -468,7 +473,7 @@ int main(int argc, char* argv[])
     char *pubTopicPtr = pubTopicName;
 
     do {
-        run_handler(tty_fd, client, pubTopicPtr, topicLen, loopPtr);
+        run_handler(tty_fd, client, pubTopicPtr, topicLen, &loopCount, &isMaster);
         loopCount += 1;
     } while (rc == MQTTCLIENT_SUCCESS && mStopRead == 0);
 
